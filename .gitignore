@@ -1,0 +1,6 @@
+.idea
+# Ignore all .tif files
+*.tif
+
+# Ignore the Results directory
+Results/

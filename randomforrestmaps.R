@@ -13,3 +13,11 @@ set.seed(123, "L'Ecuyer")
 # Load the shapefile with training areas
 ROIS <- shapefile("ROIS.shp")
 plot(ROIS)
+
+#loading the csv with the training areas
+training <- read.table("training.csv", header = TRUE, sep = ",")
+
+#removing the column with row IDs
+training <- dplyr::select(training, -X)
+
+training <- cbind(training, Class_Id = ROIS$Class_Id)

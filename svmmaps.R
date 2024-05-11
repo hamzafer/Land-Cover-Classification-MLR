@@ -32,7 +32,8 @@ write.csv(training, file = "training_svm.csv")
 classification.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
 # Training a Support Vector Machine model
-svm_model <- ksvm(Class_Id ~ ., data = training, kernel = "rbfdot", C = 1, prob.model = TRUE, kpar = "automatic")
+# Params tuned and taken from the reference paper
+svm_model <- ksvm(Class_Id ~ ., data = training, kernel = "vanilladot", C = 62.8, prob.model = TRUE)
 
 # Printing on screen model information
 print(svm_model)
@@ -54,6 +55,7 @@ pred_svm <- predict(svm_model, new_data, type = "response")  # Get class predict
 map.svm <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.svm[] <- as.numeric(pred_svm)  # Assign predicted values
 map.svm
+plot(map.svm)
 
 # Saving models
 save(svm_model, file = "Results/SVM_model.RData")

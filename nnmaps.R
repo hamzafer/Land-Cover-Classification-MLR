@@ -58,6 +58,7 @@ pred.nn <- compute(nn, new_data)
 map.nn <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.nn[] <- max.col(pred.nn$net.result) - 1  # convert probabilities to class labels (0-based)
 map.nn
+plot(map.nn)
 
 # Saving models
 save(nn, file = "Results/ANN_model.RData")

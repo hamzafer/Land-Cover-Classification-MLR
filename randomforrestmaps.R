@@ -34,8 +34,8 @@ clasificacion.task <- makeClassifTask(id = "nieves", data = training, target = "
 
 # Tuning the hyperparameters; mtry is typically close to sqrt(number of features)
 ps.rf <- makeParamSet(
-  makeDiscreteParam("mtry", values = c(3:6)),
-  makeDiscreteParam("ntree", values = c(1000, 5000, 10000))
+  makeIntegerParam("mtry", lower = 1, upper = 9),  # Number of variables tried at each split, from 1 to 9
+  makeIntegerParam("ntree", lower = 1, upper = 1000)  # Number of trees, from 1 to 1000
 )
 
 ctrl <- makeTuneControlGrid()
@@ -70,6 +70,7 @@ pred.rf <- predict(modelo.rf, newdata = new_data)
 mapa.rf <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 mapa.rf[] <- pred.rf$data$response
 mapa.rf
+plot(mapa.rf)
 
 # Saving models
 save(modelo.rf, file = "Results/RandomForest_model.RData")

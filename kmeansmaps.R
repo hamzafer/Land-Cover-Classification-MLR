@@ -77,6 +77,7 @@ map.kmeans15 <- multiseasonal[[1]]
 #with the dataframe predicted by the model
 map.kmeans15[] <- pred.kmeans$data$response
 map.kmeans15
+plot(map.kmeans15)
 
 #saving models
 save(model.kmeans, file = "Results/model_kmeans.Rdata")

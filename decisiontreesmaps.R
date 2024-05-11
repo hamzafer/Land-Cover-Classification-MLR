@@ -34,7 +34,8 @@ classification.task <- makeClassifTask(id = "nieves", data = training, target = 
 # Setting up parameter tuning for rpart
 ps.rpart <- makeParamSet(
   makeDiscreteParam("cp", values = c(0.01, 0.05, 0.1)),
-  makeIntegerParam("maxdepth", lower = 1, upper = 30)
+  makeIntegerParam("maxdepth", lower = 2, upper = 29),
+  makeIntegerParam("minsplit", lower = 1, upper = 50)
 )
 
 ctrl <- makeTuneControlRandom(maxit = 100)  # Using random search for tuning
@@ -68,6 +69,7 @@ pred.rpart <- predict(model.rpart, newdata = new_data)
 map.rpart <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.rpart[] <- pred.rpart$data$response
 map.rpart
+plot(map.rpart)
 
 # Saving models
 save(model.rpart, file = "Results/Rpart_model.RData")

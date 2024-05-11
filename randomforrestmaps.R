@@ -68,7 +68,7 @@ names(multiseasonal) <- c("BlueV", "GreenV", "RedV", "RedEdge1V", "RedEdge2V",
 new_data <- as.data.frame(as.matrix(multiseasonal))
 pred.rf <- predict(modelo.rf, newdata = new_data)
 mapa.rf <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
-mapa.rf[] <- pred.rf$data$Response
+mapa.rf[] <- pred.rf$data$response
 mapa.rf
 
 # Saving models

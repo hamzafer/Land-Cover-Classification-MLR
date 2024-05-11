@@ -4,3 +4,4 @@
 
 # Ignore the Results directory
 Results/
+.Rproj.user

@@ -34,8 +34,8 @@ clasificacion.task <- makeClassifTask(id = "nieves", data = training, target = "
 
 # Tuning the hyperparameters; mtry is typically close to sqrt(number of features)
 ps.rf <- makeParamSet(
-    makeDiscreteParam("mtry", values = c(3:6)),
-    makeDiscreteParam("ntree", values = c(1000, 5000, 10000))
+  makeDiscreteParam("mtry", values = c(3:6)),
+  makeDiscreteParam("ntree", values = c(1000, 5000, 10000))
 )
 
 ctrl <- makeTuneControlGrid()
@@ -66,14 +66,14 @@ names(multiseasonal) <- c("BlueV", "GreenV", "RedV", "RedEdge1V", "RedEdge2V",
 
 # Applying the model to predict the map
 new_data <- as.data.frame(as.matrix(multiseasonal))
-pred.rf <- predict(modelo.rf, newdata=new_data)
+pred.rf <- predict(modelo.rf, newdata = new_data)
 mapa.rf <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 mapa.rf[] <- pred.rf$data$Response
 mapa.rf
 
 # Saving models
-save(modelo.rf, file="Results/RandomForest_model.RData")
+save(modelo.rf, file = "Results/RandomForest_model.RData")
 
 # Saving the map in tif format
 writeRaster(mapa.rf, filename = "Results/RandomForest.tif",
-            format="GTiff", datatype = "FLT4S", overwrite = TRUE)
+            format = "GTiff", datatype = "FLT4S", overwrite = TRUE)

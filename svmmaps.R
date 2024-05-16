@@ -2,7 +2,6 @@
 library(raster)
 library(dplyr)
 library(mlr)
-library(kernlab)  # using kernlab for SVM
 library(ggplot2)
 library(clue)
 
@@ -22,21 +21,44 @@ training <- dplyr::select(training, -X)
 # Incorporating the class labels from the vectorial file into the training data frame
 training <- cbind(training, Class_Id = ROIS$Class_Id)
 
-# Converting the class labels to factors as required by mlr and kernlab
+# Converting the class labels to factors as required by mlr
 training$Class_Id <- as.factor(training$Class_Id)
 
 # Writing the new data frame with labels
 write.csv(training, file = "training_svm.csv")
 
-# Creating the task for mlr (using factor Class_Id)
+# Creating the classification task for mlr
 classification.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
-# Training a Support Vector Machine model
-# Params tuned and taken from the reference paper
-svm_model <- ksvm(Class_Id ~ ., data = training, kernel = "vanilladot", C = 62.8, prob.model = TRUE)
+# Define SVM learner using the 'vanilladot' kernel and appropriate cost parameter
+learner <- makeLearner("classif.ksvm", predict.type = "prob", kernel = "vanilladot")
+learner <- setHyperPars(learner, C = 62.8)
 
-# Printing on screen model information
-print(svm_model)
+# Setup cross-validation
+rdesc <- makeResampleDesc("CV", iters = 10, stratify = TRUE)
+
+# Define performance measures
+measures <- list(mmce, acc, kappa)
+
+# Perform the cross-validation
+# Perform the cross-validation with model saving
+res <- resample(learner, classification.task, rdesc, measures = measures, models = TRUE)
+print(res)
+
+# Check if models are saved
+if (!is.null(res$models)) {
+  # Extract the index of the model with the minimum MMCE
+  index_min_mmce <- which.min(res$measures.test$mmce)
+  # Extract the best model based on the minimum MMCE
+  best_model <- res$models[[index_min_mmce]]
+  print(best_model)
+} else {
+  stop("No models were saved during resampling.")
+}
+print(res)
+
+# Extract the trained model (best model from cross-validation)
+best_model <- getLearnerModel(res$models[[which.min(res$measures.test$mmce)]])
 
 # Opening the multiband tif
 multiseasonal <- brick("multiseasonal.tif")
@@ -51,14 +73,13 @@ names(multiseasonal) <- c("BlueV", "GreenV", "RedV", "RedEdge1V", "RedEdge2V",
 
 # Applying the model to predict the map
 new_data <- as.data.frame(as.matrix(multiseasonal))
-pred_svm <- predict(svm_model, new_data, type = "response")  # Get class predictions
+pred_svm <- predict(best_model, newdata = new_data, type = "response")
 map.svm <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.svm[] <- as.numeric(pred_svm)  # Assign predicted values
-map.svm
 plot(map.svm)
 
-# Saving models
-save(svm_model, file = "Results/SVM_model.RData")
+# Saving the trained model
+save(best_model, file = "Results/SVM_best_model.RData")
 
 # Saving the map in tif format
 writeRaster(map.svm, filename = "Results/SVM.tif",

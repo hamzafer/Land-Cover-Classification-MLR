@@ -2,7 +2,6 @@
 library(raster)
 library(dplyr)
 library(mlr)
-library(neuralnet)  # using neuralnet for ANN
 library(ggplot2)
 library(clue)
 
@@ -28,18 +27,57 @@ training$Class_Id <- as.factor(training$Class_Id)
 # Writing the new data frame with labels
 write.csv(training, file = "training_ann.csv")
 
-# Creating the task for mlr (using factor Class_Id)
+# Creating the classification task for mlr
 classification.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
-# Prepare data for neuralnet (encode class labels as 0-based integers)
-training_nn <- training
-training_nn$Class_Id <- as.numeric(as.character(training$Class_Id)) - 1
+# Initialize a list to store results
+results <- list()
 
-# Training a neural network model
-nn <- neuralnet(Class_Id ~ ., data = training_nn, hidden = c(5, 3), linear.output = FALSE, lifesign = "minimal")
+# Loop to train ANN models with different sizes of the hidden layer from 1 to 20
+results <- list()  # Ensure results list is initialized correctly
 
-# Printing on screen model information
-print(nn)
+for (size in 1:20) {
+  # Creating a neural network learner with a single hidden layer of varying size
+  learner <- makeLearner("classif.nnet", predict.type = "prob", size = size, maxit = 10000, decay = 0.01)
+
+  # Set up 10-fold cross-validation
+  rdesc <- makeResampleDesc("CV", iters = 10, stratify = TRUE)
+
+  # Define performance measures: MMCE, accuracy, and kappa
+  measures <- list(mmce, acc, kappa)
+
+  # Perform cross-validation and save models
+  res <- resample(learner, classification.task, rdesc, measures = measures, models = TRUE)
+  results[[paste("HiddenUnits", size)]] <- res
+  print(paste("Completed for size:", size))
+}
+
+# Extract MMCE values correctly from the results list using numeric indexing
+mmce_values <- sapply(results, function(x) {
+  if (is.vector(x$aggr) && !is.null(x$aggr["mmce.test.mean"])) {
+    return(x$aggr["mmce.test.mean"])
+  } else {
+    return(NA)  # Return NA if the expected structure isn't met
+  }
+})
+
+# Find the index of the minimum MMCE
+if (any(!is.na(mmce_values))) {
+  index_min_mmce <- which.min(mmce_values)
+  # Retrieve the best model from the results
+  best_model <- results[[index_min_mmce]]$models[[1]]
+  print(paste("Best model hidden units:", index_min_mmce))
+  print(best_model)
+} else {
+  print("MMCE values are not properly calculated or are all NA.")
+}
+
+
+# Print the results to find the best configuration based on the defined measures
+for (size in names(results)) {
+  cat("\nResults for", size, ":\n")
+  print(results[[size]]$aggr)
+}
 
 # Opening the multiband tif
 multiseasonal <- brick("multiseasonal.tif")
@@ -54,15 +92,13 @@ names(multiseasonal) <- c("BlueV", "GreenV", "RedV", "RedEdge1V", "RedEdge2V",
 
 # Applying the model to predict the map
 new_data <- as.data.frame(as.matrix(multiseasonal))
-pred.nn <- compute(nn, new_data)
+pred.nn <- predict(best_model, newdata = new_data)
 map.nn <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
-map.nn[] <- max.col(pred.nn$net.result) - 1  # convert probabilities to class labels (0-based)
-map.nn
+map.nn[] <- pred.nn$data$response
 plot(map.nn)
 
-# Saving models
-save(nn, file = "Results/ANN_model.RData")
+# Saving the best model
+save(best_model, file = "Results/ANN_best_model.RData")
 
 # Saving the map in tif format
-writeRaster(map.nn, filename = "Results/ANN.tif",
-            format = "GTiff", datatype = "FLT4S", overwrite = TRUE)
+writeRaster(map.nn, filename = "Results/ANN.tif", format = "GTiff", datatype = "FLT4S", overwrite = TRUE)

@@ -28,7 +28,7 @@ write.csv(training, file = "training_rpart.csv")
 # Converting the class labels to categorical
 training$Class_Id <- as.factor(training$Class_Id)
 
-# Creating the task
+# Creating the classification task
 classification.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
 # Setting up parameter tuning for rpart
@@ -38,15 +38,19 @@ ps.rpart <- makeParamSet(
   makeIntegerParam("minsplit", lower = 1, upper = 50)
 )
 
+# Define performance measures
+measures <- list(mmce, acc, kappa)  # mmce, accuracy, and kappa
+
 ctrl <- makeTuneControlRandom(maxit = 100)  # Using random search for tuning
-rdesc <- makeResampleDesc("CV", iters = 10)
+rdesc <- makeResampleDesc("CV", iters = 10, stratify = TRUE)  # 10-fold cross-validation
+
+# Perform the tuning
 res <- tuneParams("classif.rpart", task = classification.task, resampling = rdesc,
-                  par.set = ps.rpart, measures = mmce, control = ctrl)
-res
+                  par.set = ps.rpart, measures = measures, control = ctrl)
+print(res)
 
 # Setting hyperparameters and training the model
-learner <- setHyperPars(makeLearner("classif.rpart", predict.type = "prob"),
-                        par.vals = res$x)
+learner <- setHyperPars(makeLearner("classif.rpart", predict.type = "prob"), par.vals = res$x)
 model.rpart <- train(learner, classification.task)
 
 # Printing on screen model information
@@ -68,7 +72,6 @@ new_data <- as.data.frame(as.matrix(multiseasonal))
 pred.rpart <- predict(model.rpart, newdata = new_data)
 map.rpart <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.rpart[] <- pred.rpart$data$response
-map.rpart
 plot(map.rpart)
 
 # Saving models

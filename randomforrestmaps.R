@@ -1,5 +1,4 @@
 # Step 1: Load libraries
-#load libraries
 library(raster)
 library(dplyr)
 library(mlr)
@@ -7,49 +6,57 @@ library(randomForest)
 library(ggplot2)
 library(clue)
 
-#defining the seed
+# Defining the seed for reproducibility
 set.seed(123, "L'Ecuyer")
 
 # Load the shapefile with training areas
 ROIS <- shapefile("ROIS.shp")
 plot(ROIS)
 
-#loading the csv with the training areas
+# Loading the CSV with the training areas
 training <- read.table("training.csv", header = TRUE, sep = ",")
 
-#removing the column with row IDs
+# Removing the column with row IDs
 training <- dplyr::select(training, -X)
 
 # Incorporating the class labels from the vectorial file into the training data frame
 training <- cbind(training, Class_Id = ROIS$Class_Id)
 
-# Writing the new data frame with labels
-write.csv(training, file = "training_RF.csv")
-
-# converting the class labels in categorical
+# Converting the class labels into a categorical variable
 training$Class_Id <- as.factor(training$Class_Id)
 
-# Creating the task
+# Creating the classification task
 clasificacion.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
-# Tuning the hyperparameters; mtry is typically close to sqrt(number of features)
+# Define the parameter set for hyperparameter tuning
 ps.rf <- makeParamSet(
-  makeIntegerParam("mtry", lower = 1, upper = 9),  # Number of variables tried at each split, from 1 to 9
-  makeIntegerParam("ntree", lower = 1, upper = 1000)  # Number of trees, from 1 to 1000
+  makeIntegerParam("mtry", lower = 1, upper = 9),  # Number of variables tried at each split
+  makeIntegerParam("ntree", lower = 1, upper = 1000)  # Number of trees
 )
 
-ctrl <- makeTuneControlGrid()
-rdesc <- makeResampleDesc("CV", iters = 10)
-res <- tuneParams("classif.randomForest", task = clasificacion.task, resampling = rdesc,
-                  par.set = ps.rf, measures = mmce, control = ctrl)
-res
+# Setup the cross-validation strategy
+rdesc <- makeResampleDesc("CV", iters = 10, stratify = TRUE)  # 10-fold cross-validation
 
-# Setting hyperparameters and training the model
-lrn <- setHyperPars(makeLearner("classif.randomForest", predict.type = "prob"),
-                    par.vals = res$x, importance = TRUE)
+# Define the control function for tuning
+ctrl <- makeTuneControlGrid()
+
+# Define the performance measures
+measures <- list(mmce, acc, kappa)  # MMCE, accuracy, and kappa
+
+# Perform the tuning and cross-validation
+res <- tuneParams("classif.randomForest", task = clasificacion.task, resampling = rdesc,
+                  par.set = ps.rf, measures = measures, control = ctrl)
+
+# Output the results of tuning
+print(res)
+
+# Setting hyperparameters based on the best model found
+lrn <- setHyperPars(makeLearner("classif.randomForest", predict.type = "prob"), par.vals = res$x)
+
+# Train the model with the entire dataset using the best parameters
 modelo.rf <- train(lrn, clasificacion.task)
 
-# Printing on screen model information
+# Print model information
 print(modelo.rf$learner.model$confusion)
 print(modelo.rf$learner.model$importance)
 
@@ -69,12 +76,10 @@ new_data <- as.data.frame(as.matrix(multiseasonal))
 pred.rf <- predict(modelo.rf, newdata = new_data)
 mapa.rf <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 mapa.rf[] <- pred.rf$data$response
-mapa.rf
 plot(mapa.rf)
 
-# Saving models
+# Saving the trained model
 save(modelo.rf, file = "Results/RandomForest_model.RData")
 
 # Saving the map in tif format
-writeRaster(mapa.rf, filename = "Results/RandomForest.tif",
-            format = "GTiff", datatype = "FLT4S", overwrite = TRUE)
+writeRaster(mapa.rf, filename = "Results/RandomForest.tif", format = "GTiff", datatype = "FLT4S", overwrite = TRUE)

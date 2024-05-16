@@ -1,12 +1,11 @@
 # Step 1: Load libraries
-library(mlr)
-library(kernlab)
 library(raster)
 library(dplyr)
+library(mlr)
 library(ggplot2)
 library(clue)
 
-# Defining the seed for reproducibility
+# Defining the seed
 set.seed(123, "L'Ecuyer")
 
 # Load the shapefile with training areas
@@ -25,35 +24,41 @@ training <- cbind(training, Class_Id = ROIS$Class_Id)
 # Converting the class labels to factors as required by mlr
 training$Class_Id <- as.factor(training$Class_Id)
 
+# Writing the new data frame with labels
+write.csv(training, file = "training_svm.csv")
+
 # Creating the classification task for mlr
-classification.task <- makeClassifTask(data = training, target = "Class_Id")
+classification.task <- makeClassifTask(id = "nieves", data = training, target = "Class_Id")
 
-# Define a parameter set for tuning
-param_set <- makeParamSet(
-  makeDiscreteParam("kernel", values = c("vanilladot", "rbfdot", "polydot", "tanhdot")),
-  makeNumericParam("C", lower = log(0.1), upper = log(100), trafo = function(x) exp(x)),  # Log scale for C
-  makeNumericParam("sigma", lower = log(0.05), upper = log(1), trafo = function(x) exp(x), requires = quote(kernel == "rbfdot")),  # Only for RBF kernel
-  makeIntegerParam("degree", lower = 1, upper = 10, requires = quote(kernel == "polydot")),  # Only for polynomial kernel
-  makeNumericParam("scale", lower = 1, upper = 10, requires = quote(kernel %in% c("polydot", "tanhdot")))  # Bias for poly/sigmoid
-)
+# Define SVM learner using the 'vanilladot' kernel and appropriate cost parameter
+learner <- makeLearner("classif.ksvm", predict.type = "prob", kernel = "vanilladot")
+learner <- setHyperPars(learner, C = 62.8)
 
-
-# Setup a tuning method, here using random search for demonstration
-tune.ctrl <- makeTuneControlRandom(maxit = 100)
-
-# Cross-validation setup
+# Setup cross-validation
 rdesc <- makeResampleDesc("CV", iters = 10, stratify = TRUE)
 
-# Train the SVM model with tuning
-tuned.result <- tuneParams("classif.ksvm", task = classification.task, resampling = rdesc,
-                           par.set = param_set, control = tune.ctrl, measures = list(mmce, acc, kappa))
+# Define performance measures
+measures <- list(mmce, acc, kappa)
 
-# Best tuned model parameters
-print(tuned.result)
+# Perform the cross-validation
+# Perform the cross-validation with model saving
+res <- resample(learner, classification.task, rdesc, measures = measures, models = TRUE)
+print(res)
 
-# Train the best model on the full dataset
-svm_model <- setHyperPars(makeLearner("classif.ksvm", predict.type = "prob"), par.vals = tuned.result$x)
-svm_model <- train(svm_model, classification.task)
+# Check if models are saved
+if (!is.null(res$models)) {
+  # Extract the index of the model with the minimum MMCE
+  index_min_mmce <- which.min(res$measures.test$mmce)
+  # Extract the best model based on the minimum MMCE
+  best_model <- res$models[[index_min_mmce]]
+  print(best_model)
+} else {
+  stop("No models were saved during resampling.")
+}
+print(res)
+
+# Extract the trained model (best model from cross-validation)
+best_model <- getLearnerModel(res$models[[which.min(res$measures.test$mmce)]])
 
 # Opening the multiband tif
 multiseasonal <- brick("multiseasonal.tif")
@@ -68,13 +73,14 @@ names(multiseasonal) <- c("BlueV", "GreenV", "RedV", "RedEdge1V", "RedEdge2V",
 
 # Applying the model to predict the map
 new_data <- as.data.frame(as.matrix(multiseasonal))
-pred_svm <- predict(svm_model, newdata = new_data, type = "response")
+pred_svm <- predict(best_model, newdata = new_data, type = "response")
 map.svm <- multiseasonal[[1]]  # Using the first layer as a template for dimensions
 map.svm[] <- as.numeric(pred_svm)  # Assign predicted values
 plot(map.svm)
 
 # Saving the trained model
-save(svm_model, file = "Results/SVM_best_model.RData")
+save(best_model, file = "Results/SVM_best_model.RData")
 
 # Saving the map in tif format
-writeRaster(map.svm, filename = "Results/SVM.tif", format = "GTiff", datatype = "FLT4S", overwrite = TRUE)
+writeRaster(map.svm, filename = "Results/SVM.tif",
+            format = "GTiff", datatype = "FLT4S", overwrite = TRUE)
